@@ -1,4 +1,3 @@
-import matplotlib
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
@@ -7,6 +6,8 @@ import logging
 from scipy.stats import multivariate_normal, bernoulli
 from scipy.optimize import minimize
 from matplotlib import pyplot as plt
+
+plt.style.use(['science', 'notebook', 'grid'])
 
 
 bid_data = np.loadtxt('data/eBayNumberOfBidderData.dat', unpack=True)
@@ -18,7 +19,7 @@ df = pd.DataFrame(bid_data.T, columns=columns)
 def log_prior(x: np.array, design_matrix: np.array) -> float:
     epsilon = 1e-16
     mean = np.zeros(len(x))
-    covariance_matrix = np.linalg.inv((design_matrix.T @ design_matrix))
+    covariance_matrix = 100 * np.linalg.inv((design_matrix.T @ design_matrix))
     return np.log(multivariate_normal.pdf(x, mean, covariance_matrix) + epsilon)
 
 
@@ -69,16 +70,19 @@ class MetropolisRandomWalk:
         return samples
 
     def plot_simulations(self):
-        # TODO: remove hard coded fig grid.
-        fig_grid = (2, 4)
+        # TODO: remove hard-coded fig grid.
+        fig_grid = (3, 3)
         fig, axs = plt.subplots(fig_grid[0], fig_grid[1])
         x = [i for i in range(self.SAMPLE_SIZE)]
-        for j in range(4):
+        for j in range(3):
             y = [sample[j] for sample in self.samples]
             axs[0, j].plot(x, y)
-        for j in range(4, 8):
+        for j in range(3, 6):
             y = [sample[j] for sample in self.samples]
-            axs[1, j-4].plot(x, y)
+            axs[1, j-3].plot(x, y)
+        for j in range(6, 9):
+            y = [sample[j] for sample in self.samples]
+            axs[2, j-6].plot(x, y)
         plt.show()
 
 
@@ -91,6 +95,9 @@ if __name__ == '__main__':
     poisson_results = poisson_regression.fit()
     print(poisson_results.summary())
     mode_params = poisson_results.params
+    pos_inv_hess = np.linalg.inv(poisson_regression.hessian(mode_params))
+    print('pos hess')
+    print(pos_inv_hess)
 
     # Data matrices.
     target = df['nBids']
@@ -98,6 +105,7 @@ if __name__ == '__main__':
 
     # Initial parameter distribtuion.
     mean = np.zeros(len(mode_params))
+    mean = mode_params
     cov = np.linalg.inv(design_matrix.T @ design_matrix)
 
     # Constant for optimzation tries.
@@ -119,55 +127,13 @@ if __name__ == '__main__':
 
     mode_param_norm = solution.x
     mode_param_inv_hess = solution.hess_inv
-    print(multivariate_normal.rvs(mode_param_norm, -mode_param_inv_hess, 1))
 
-    # Creating ad-hoc posterior function to be used in metropolios walk.
-    # Note: I had troubles with the -Hessian not being postive semi definite.
-    # Using posterior proprortionallity and log of alpha for computational reasons.
     def test_posterior_function(x: np.array) -> float:
         return log_likelihood(x, design_matrix, target) + log_prior(x, design_matrix=design_matrix)
 
     # Creating a Metropolios Random Walk for multivariate normal appr. posterior.
-    init_sample = np.zeros(9)
+    init_sample = mode_param_norm
     metropolis_walk = MetropolisRandomWalk(
-        test_posterior_function, init_sample=init_sample, step=0.1, cov_matrix=np.identity(9))
-    print(metropolis_walk.generate_samples())
+        test_posterior_function, init_sample=init_sample, step=0.001, cov_matrix=-pos_inv_hess)
+    metropolis_walk.generate_samples()
     metropolis_walk.plot_simulations()
-
-
-class MetropolisRandomWalk_old:
-
-    def __init__(self, posterior_function, init_sample: np.array, step_lenght: float, covariance_matrix: np.array):
-
-        self.posterior_function = posterior_function
-        self.init_sample = init_sample
-        self.step_lenght = step_lenght
-        self.covariance_matrix = step_lenght * covariance_matrix
-
-    def simulate_params(self, size: int = 100) -> list:
-        samples = []
-        prev_sample = self.init_sample
-
-        for _ in range(size):
-            current_sample = multivariate_normal.rvs(prev_sample,
-                                                     self.covariance_matrix,
-                                                     1
-                                                     )
-            try:
-                beta = self.posterior_function(
-                    current_sample)/self.posterior_function(prev_sample)
-            except TypeError as e:
-                logging.critical(e, exc_info=True)
-            except ValueError as e:
-                logging.critical(e, exc_info=True)
-            finally:
-                print('H')
-
-            alpha = np.min(1, beta)
-            decision = bernoulli.rvs(alpha, size=1)
-            if decision:
-                current_sample = prev_sample
-
-            samples.append(current_sample)
-
-        return samples
