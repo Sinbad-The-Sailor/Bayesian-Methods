@@ -3,7 +3,7 @@ import pandas as pd
 import statsmodels.api as sm
 import logging
 
-from scipy.stats import multivariate_normal, bernoulli
+from scipy.stats import multivariate_normal, bernoulli, poisson
 from scipy.optimize import minimize
 from matplotlib import pyplot as plt
 
@@ -31,6 +31,11 @@ def objective(w: np.array, X: np.array, t: np.array) -> float:
     return -(log_prior(w, X) + log_likelihood(w, X, t))
 
 
+def posterior_predictive_distribution(x: np.array, w: np.array) -> float:
+    mean = x.T @ w
+    return poisson.rvs(mean, size=1)[0]
+
+
 class MetropolisRandomWalk:
     SAMPLE_SIZE = 5000
 
@@ -50,6 +55,7 @@ class MetropolisRandomWalk:
         '''
         alpha = min((self.posterior_function(candidate_sample)) -
                     (self.posterior_function(prev_sample)), 0)
+        print(np.exp(alpha))
         return np.exp(alpha)
 
     def generate_samples(self, sample_size: int = SAMPLE_SIZE) -> list:
@@ -135,5 +141,12 @@ if __name__ == '__main__':
     init_sample = mode_param_norm
     metropolis_walk = MetropolisRandomWalk(
         test_posterior_function, init_sample=init_sample, step=0.001, cov_matrix=-pos_inv_hess)
-    metropolis_walk.generate_samples()
-    metropolis_walk.plot_simulations()
+    posterior_samples = metropolis_walk.generate_samples()
+    # metropolis_walk.plot_simulations()
+
+    example_data = np.array([1, 1, 0, 1, 0, 1, 0, 1.2, 0.8])
+    pred_posterior = [posterior_predictive_distribution(
+        example_data, w) for w in posterior_samples]
+
+    plt.hist(pred_posterior, edgecolor='black')
+    plt.show()
