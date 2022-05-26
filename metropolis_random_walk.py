@@ -76,7 +76,6 @@ class MetropolisRandomWalk:
         return samples
 
     def plot_simulations(self):
-        # TODO: remove hard-coded fig grid.
         fig_grid = (3, 3)
         fig, axs = plt.subplots(fig_grid[0], fig_grid[1])
         x = [i for i in range(self.SAMPLE_SIZE)]
@@ -142,11 +141,13 @@ if __name__ == '__main__':
     metropolis_walk = MetropolisRandomWalk(
         test_posterior_function, init_sample=init_sample, step=0.001, cov_matrix=-pos_inv_hess)
     posterior_samples = metropolis_walk.generate_samples()
-    # metropolis_walk.plot_simulations()
+    metropolis_walk.plot_simulations()
 
     example_data = np.array([1, 1, 0, 1, 0, 1, 0, 1.2, 0.8])
     pred_posterior = [posterior_predictive_distribution(
         example_data, w) for w in posterior_samples]
-
+    zero_bidders = [w for w in pred_posterior if w == 0]
+    print('prob', len(zero_bidders)/len(pred_posterior))
     plt.hist(pred_posterior, edgecolor='black')
+    plt.title('Posterior Predictive Distribution')
     plt.show()
